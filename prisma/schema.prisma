@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EnergyLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+  PARTIAL
+  POSTPONED
+  CANCELLED
+}
+
+enum TaskCategory {
+  WORK
+  STUDY
+  HEALTH
+  PERSONAL
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String?
+  email          String?         @unique
+  emailVerified  DateTime?
+  image          String?
+  timezone       String          @default("America/Mexico_City")
+  preferences    Json            @default("{}")
+  accounts       Account[]
+  sessions       Session[]
+  tasks          Task[]
+  categories     Category[]
+  routines       Routine[]
+  calendarEvents CalendarEvent[]
+  dailyReviews   DailyReview[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId, provider])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Task {
+  id                    String         @id @default(cuid())
+  userId                String
+  categoryId            String?
+  title                 String
+  description           String?        @db.Text
+  energyLevel           EnergyLevel    @default(MEDIUM)
+  isTop3                Boolean        @default(false)
+  status                TaskStatus     @default(PENDING)
+  startTime             DateTime       @db.Timestamptz(3)
+  endTime               DateTime       @db.Timestamptz(3)
+  date                  DateTime       @db.Date
+  googleCalendarEventId String?        @unique
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category              Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  executionLogs         ExecutionLog[]
+  calendarEvent         CalendarEvent?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([userId, date, startTime])
+  @@index([userId, isTop3, date])
+  @@index([categoryId, date])
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  userId    String
+  name      TaskCategory
+  label     String
+  color     String       @default("#526d50")
+  icon      String?
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Routine {
+  id              String      @id @default(cuid())
+  userId          String
+  title           String
+  defaultDuration Int
+  energyLevel     EnergyLevel @default(LOW)
+  categoryId      String?
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model ExecutionLog {
+  id            String     @id @default(cuid())
+  taskId        String
+  status        TaskStatus
+  completedAt   DateTime   @default(now())
+  notes         String?    @db.Text
+  proofMediaUrl String?
+  task          Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, completedAt])
+}
+
+model CalendarEvent {
+  id            String   @id @default(cuid())
+  userId        String
+  googleEventId String
+  summary       String
+  description   String?  @db.Text
+  startTime     DateTime @db.Timestamptz(3)
+  endTime       DateTime @db.Timestamptz(3)
+  isAllDay      Boolean  @default(false)
+  htmlLink      String?
+  appTaskId     String?  @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appTask       Task?    @relation(fields: [appTaskId], references: [id], onDelete: SetNull)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, googleEventId])
+  @@index([userId, startTime, endTime])
+}
+
+model DailyReview {
+  id             String   @id @default(cuid())
+  userId         String
+  date           DateTime @db.Date
+  completedCount Int      @default(0)
+  plannedCount   Int      @default(0)
+  reflection     String?  @db.Text
+  top3Completed  Boolean  @default(false)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}

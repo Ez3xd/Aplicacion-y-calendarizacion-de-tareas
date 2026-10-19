@@ -1,0 +1,32 @@
+import Link from "next/link";
+
+export default function PrivacyPage() {
+  return (
+    <main className="privacy-page">
+      <article>
+        <Link href="/">← Volver a Tempo</Link>
+        <p className="privacy-draft">Borrador: no publicar para usuarios externos sin completar y revisar los datos del operador y las leyes aplicables.</p>
+        <h1>Aviso de privacidad de Tempo</h1>
+        <p>Este aviso describe el tratamiento de datos en la versión de prueba de Tempo. Antes de operar públicamente, el responsable debe completar su identidad, domicilio, correo de contacto, jurisdicción y plazos de conservación.</p>
+
+        <h2>Quién opera el servicio</h2>
+        <p>Responsable: [nombre legal o razón social del operador]. Domicilio: [domicilio]. Contacto de privacidad: [correo de contacto]. Estos campos son obligatorios antes de publicar el servicio.</p>
+
+        <h2>Datos y permisos solicitados</h2>
+        <p>Al iniciar sesión con Google, la aplicación solicita únicamente los permisos básicos de identidad para iniciar sesión y mostrar el nombre y correo de la cuenta. El adaptador de autenticación guarda en la base de datos el identificador de la cuenta de Google y los datos técnicos de autenticación que entrega el proveedor. No solicita acceso al calendario en esta versión. Las funciones de integración con Google Calendar no están conectadas a la interfaz y no se activan por iniciar sesión.</p>
+        <p>Las tareas que el usuario crea (título, fecha, horario, categoría, nivel de energía, estado y prioridad) se guardan en la base de datos del servicio y se asocian a su cuenta. Google procesa la autenticación según sus propios términos y políticas de privacidad.</p>
+
+        <h2>Finalidades y terceros</h2>
+        <p>Los datos de cuenta se usan para autenticar al usuario y separar sus tareas de las de otras cuentas. Las tareas se usan para mostrar y sincronizar la planificación entre dispositivos. La aplicación no vende datos ni los usa para publicidad. El proveedor de alojamiento y el proveedor de base de datos recibirán los datos necesarios para operar el servicio; el operador debe identificarlos aquí antes de producción.</p>
+
+        <h2>Conservación, seguridad y derechos</h2>
+        <p>Los datos se conservan en la base de datos configurada por el operador. Esta versión aún no incluye una opción de eliminar cuenta o exportar datos desde la aplicación. Antes de invitar a usuarios, el operador debe publicar plazos concretos de conservación, un canal efectivo para ejercer los derechos aplicables y un procedimiento para eliminar los datos y copias de respaldo.</p>
+        <p>El servicio debe desplegarse detrás de HTTPS, proteger las credenciales y la base de datos y limitar el acceso administrativo. La conexión local de prueba no está destinada a datos reales.</p>
+
+        <h2>Google OAuth y publicación</h2>
+        <p>El operador debe completar y publicar una política de privacidad accesible desde la pantalla de consentimiento de Google, configurar correctamente el dominio y las URL de redirección y solicitar la verificación de Google cuando corresponda. Si se añaden permisos de Calendar, deberán explicarse antes de solicitarlos, pedirse solo al activar esa función y someterse a los requisitos de verificación aplicables.</p>
+        <p>Este texto es una base informativa para pruebas, no asesoría ni certificación legal. El operador debe adaptarlo a cada jurisdicción y solicitar revisión profesional antes de ofrecer el servicio al público.</p>
+      </article>
+    </main>
+  );
+}
