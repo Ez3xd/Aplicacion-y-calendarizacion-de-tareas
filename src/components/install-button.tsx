@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -9,6 +10,7 @@ interface InstallPromptEvent extends Event {
 }
 
 export function InstallButton() {
+  const { t } = useLanguage();
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export function InstallButton() {
       await promptEvent.userChoice;
       setPromptEvent(null);
     }}>
-      <Download size={14} /> Instalar
+      <Download size={14} /> {t("Instalar")}
     </button>
   );
 }

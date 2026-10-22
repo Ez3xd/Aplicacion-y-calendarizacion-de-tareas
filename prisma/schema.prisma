@@ -21,6 +21,12 @@ enum TaskStatus {
   CANCELLED
 }
 
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 enum TaskCategory {
   WORK
   STUDY
@@ -90,6 +96,11 @@ model Task {
   categoryId            String?
   title                 String
   description           String?        @db.Text
+  location              String?
+  priority              TaskPriority   @default(MEDIUM)
+  recurrence            String?
+  recurrenceEnd         DateTime?      @db.Date
+  reminderMinutes       Int?
   energyLevel           EnergyLevel    @default(MEDIUM)
   isTop3                Boolean        @default(false)
   status                TaskStatus     @default(PENDING)
@@ -101,12 +112,16 @@ model Task {
   category              Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   executionLogs         ExecutionLog[]
   calendarEvent         CalendarEvent?
+  parentTaskId          String?
+  parentTask            Task?          @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks              Task[]         @relation("TaskSubtasks")
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
   @@index([userId, date, startTime])
   @@index([userId, isTop3, date])
   @@index([categoryId, date])
+  @@index([userId, parentTaskId])
 }
 
 model Category {

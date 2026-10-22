@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { signIn } from "next-auth/react";
+import { useLanguage } from "@/components/language-provider";
 import {
   Bell,
   Calendar,
@@ -25,28 +27,14 @@ function getInitialNotificationStatus(): NotificationPermission {
   return "default";
 }
 
-function getInitialServices(): Record<string, boolean> {
-  if (typeof window !== "undefined") {
-    try {
-      const saved = localStorage.getItem("tempo_google_integrations");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-  }
-  return {
-    calendar: false,
-    drive: false,
-    tasks: false,
-    gmail: false,
-  };
-}
-
 export function GoogleIntegrationsModal({
   isOpen,
   onClose,
   signedIn,
 }: GoogleIntegrationsModalProps) {
+  const { t } = useLanguage();
   const [notificationStatus, setNotificationStatus] = useState<NotificationPermission>(getInitialNotificationStatus);
-  const [connectedServices, setConnectedServices] = useState<Record<string, boolean>>(getInitialServices);
+  const [connectedServices, setConnectedServices] = useState<Record<string, boolean>>({ calendar: signedIn });
   const [loadingService, setLoadingService] = useState<string | null>(null);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
@@ -54,7 +42,7 @@ export function GoogleIntegrationsModal({
 
   async function requestNotificationPermission() {
     if (typeof window === "undefined" || !("Notification" in window)) {
-      setAlertMsg("Este navegador no soporta notificaciones de escritorio/móvil.");
+      setAlertMsg(t("Este navegador no soporta notificaciones de escritorio/móvil."));
       return;
     }
 
@@ -62,56 +50,56 @@ export function GoogleIntegrationsModal({
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
       if (permission === "granted") {
-        setAlertMsg("¡Permiso de notificaciones concedido! Las alertas llegarán a tiempo.");
-        new Notification("Tempo — Notificaciones activadas", {
-          body: "Ahora recibirás recordatorios de tus tareas y momentos de descanso.",
+        setAlertMsg(t("¡Permiso de notificaciones concedido! Las alertas llegarán a tiempo."));
+        new Notification(t("Tempo — Notificaciones activadas"), {
+          body: t("Ahora recibirás recordatorios de tus tareas y momentos de descanso."),
           icon: "/icon.svg",
         });
       } else if (permission === "denied") {
-        setAlertMsg("Permiso denegado. Puedes reactivarlo en los ajustes de tu navegador o app.");
+        setAlertMsg(t("Permiso denegado. Puedes reactivarlo en los ajustes de tu navegador o app."));
       }
     } catch {
-      setAlertMsg("Ocurrió un error al solicitar permiso de notificaciones.");
+      setAlertMsg(t("Ocurrió un error al solicitar permiso de notificaciones."));
     }
   }
 
   function sendTestNotification() {
     if (Notification.permission === "granted") {
-      new Notification("Tempo — Recordatorio amable", {
-        body: "Momento de una pausa: respira hondo y cuida tu ritmo.",
+      new Notification(t("Tempo — Recordatorio amable"), {
+        body: t("Momento de una pausa: respira hondo y cuida tu ritmo."),
         icon: "/icon.svg",
       });
-      setAlertMsg("Notificación de prueba enviada a tu dispositivo.");
+      setAlertMsg(t("Notificación de prueba enviada a tu dispositivo."));
     } else {
       void requestNotificationPermission();
     }
   }
 
-  function handleToggleGoogleService(serviceKey: string, serviceName: string) {
+  async function handleToggleGoogleService(serviceKey: string, serviceName: string) {
     if (!signedIn) {
-      setAlertMsg("Primero debes iniciar sesión con tu cuenta de Google para vincular este servicio.");
+      await signIn("google", { callbackUrl: window.location.pathname });
+      return;
+    }
+
+    if (serviceKey !== "calendar") {
+      setAlertMsg(t(`${serviceName} todavía no está disponible. Esta opción quedará habilitada en una próxima versión.`));
       return;
     }
 
     setLoadingService(serviceKey);
     setAlertMsg(null);
 
-    // Flujo de consentimiento de permisos de Google
-    setTimeout(() => {
-      setConnectedServices((prev) => {
-        const nextState = { ...prev, [serviceKey]: !prev[serviceKey] };
-        try {
-          localStorage.setItem("tempo_google_integrations", JSON.stringify(nextState));
-        } catch {}
-        return nextState;
-      });
+    try {
+      const response = await fetch("/api/google/calendar/sync", { method: "POST" });
+      const result = await response.json() as { error?: string; synced?: number };
+      if (!response.ok) throw new Error(result.error ?? `No se pudo sincronizar ${serviceName}.`);
+      setConnectedServices((prev) => ({ ...prev, calendar: true }));
+      setAlertMsg(`${serviceName} ${t("sincronizado")}: ${result.synced ?? 0} ${t("eventos actualizados")}.`);
+    } catch (error) {
+      setAlertMsg(error instanceof Error ? t(error.message) : t(`No se pudo sincronizar ${serviceName}. Reautoriza tu cuenta de Google.`));
+    } finally {
       setLoadingService(null);
-      setAlertMsg(
-        !connectedServices[serviceKey]
-          ? `Permiso concedido para ${serviceName}. Sincronización habilitada.`
-          : `Se ha desconectado el acceso a ${serviceName}.`
-      );
-    }, 600);
+    }
   }
 
   return (
@@ -123,11 +111,11 @@ export function GoogleIntegrationsModal({
               <Shield size={18} />
             </span>
             <div>
-              <h2 id="modal-title">Servicios de Google y Notificaciones</h2>
-              <p>Controla los accesos a programas de Google y alertas a tu dispositivo</p>
+              <h2 id="modal-title">{t("Servicios de Google y Notificaciones")}</h2>
+              <p>{t("Controla los accesos a programas de Google y alertas a tu dispositivo")}</p>
             </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Cerrar ventana">
+          <button className="modal-close-btn" onClick={onClose} aria-label={t("Cerrar ventana")}>
             <X size={18} />
           </button>
         </header>
@@ -144,10 +132,10 @@ export function GoogleIntegrationsModal({
           <section className="integration-section">
             <div className="integration-section-header">
               <span className="section-dot" />
-              <h3>Notificaciones del Dispositivo (Push)</h3>
+              <h3>{t("Notificaciones del Dispositivo (Push)")}</h3>
             </div>
             <p className="integration-desc">
-              Recibe avisos al iniciar una tarea de tu Top 3, recordatorios de pausas activas y alertas de cierre de jornada.
+              {t("Recibe avisos al iniciar una tarea de tu Top 3, recordatorios de pausas activas y alertas de cierre de jornada.")}
             </p>
 
             <div className="integration-card">
@@ -156,10 +144,10 @@ export function GoogleIntegrationsModal({
                   <Bell size={20} />
                 </div>
                 <div>
-                  <strong>Notificaciones Push</strong>
+                  <strong>{t("Notificaciones Push")}</strong>
                   <div className="status-badge-row">
                     <span className={`status-badge ${notificationStatus === "granted" ? "status-success" : notificationStatus === "denied" ? "status-danger" : "status-warning"}`}>
-                      {notificationStatus === "granted" ? "Permiso concedido" : notificationStatus === "denied" ? "Bloqueado por el navegador" : "Pendiente de permiso"}
+                      {notificationStatus === "granted" ? t("Permiso concedido") : notificationStatus === "denied" ? t("Bloqueado por el navegador") : t("Pendiente de permiso")}
                     </span>
                   </div>
                 </div>
@@ -168,11 +156,11 @@ export function GoogleIntegrationsModal({
               <div className="integration-actions">
                 {notificationStatus === "granted" ? (
                   <button className="btn-secondary" onClick={sendTestNotification}>
-                    <Sparkles size={14} /> Enviar prueba
+                    <Sparkles size={14} /> {t("Enviar prueba")}
                   </button>
                 ) : (
                   <button className="btn-primary" onClick={requestNotificationPermission}>
-                    <Bell size={14} /> Permitir notificaciones
+                    <Bell size={14} /> {t("Permitir notificaciones")}
                   </button>
                 )}
               </div>
@@ -183,10 +171,10 @@ export function GoogleIntegrationsModal({
           <section className="integration-section">
             <div className="integration-section-header">
               <span className="section-dot" />
-              <h3>Programas y Aplicaciones de Google</h3>
+              <h3>{t("Programas y Aplicaciones de Google")}</h3>
             </div>
             <p className="integration-desc">
-              Conecta servicios específicos de tu ecosistema Google. Cada programa solicita permisos independientes bajo tu consentimiento.
+              {t("Conecta servicios específicos de tu ecosistema Google. Cada programa solicita permisos independientes bajo tu consentimiento.")}
             </p>
 
             <div className="services-grid">
@@ -198,22 +186,22 @@ export function GoogleIntegrationsModal({
                   </div>
                   <div className="service-meta">
                     <h4>Google Calendar</h4>
-                    <small>Sincroniza eventos y bloques de enfoque</small>
+                    <small>{t("Sincroniza eventos y bloques de enfoque")}</small>
                   </div>
                 </div>
                 <p className="service-details">
-                  Lee y agenda bloques en tu calendario principal para evitar colisiones de horario.
+                  {t("Lee y agenda bloques en tu calendario principal para evitar colisiones de horario.")}
                 </p>
                 <div className="service-bottom">
                   <span className={`service-chip ${connectedServices.calendar ? "active" : ""}`}>
-                    {connectedServices.calendar ? "Conectado" : "No vinculado"}
+                    {connectedServices.calendar ? t("Conectado") : t("No vinculado")}
                   </span>
                   <button
                     className={`btn-action ${connectedServices.calendar ? "btn-disconnect" : "btn-connect"}`}
                     disabled={loadingService === "calendar"}
                     onClick={() => handleToggleGoogleService("calendar", "Google Calendar")}
                   >
-                    {loadingService === "calendar" ? "Procesando..." : connectedServices.calendar ? "Desconectar" : "Conectar"}
+                    {loadingService === "calendar" ? t("Sincronizando...") : connectedServices.calendar ? t("Sincronizar") : t("Conectar Google")}
                   </button>
                 </div>
               </div>
@@ -226,22 +214,22 @@ export function GoogleIntegrationsModal({
                   </div>
                   <div className="service-meta">
                     <h4>Google Drive / Docs</h4>
-                    <small>Respaldos automáticos y notas</small>
+                    <small>{t("Respaldos automáticos y notas")}</small>
                   </div>
                 </div>
                 <p className="service-details">
-                  Guarda tus reflexiones diarias y copias de seguridad de tus planes en una carpeta propia de Drive.
+                  {t("Guarda tus reflexiones diarias y copias de seguridad de tus planes en una carpeta propia de Drive.")}
                 </p>
                 <div className="service-bottom">
                   <span className={`service-chip ${connectedServices.drive ? "active" : ""}`}>
-                    {connectedServices.drive ? "Conectado" : "No vinculado"}
+                    {connectedServices.drive ? t("Conectado") : t("No vinculado")}
                   </span>
                   <button
                     className={`btn-action ${connectedServices.drive ? "btn-disconnect" : "btn-connect"}`}
-                    disabled={loadingService === "drive"}
+                    disabled
                     onClick={() => handleToggleGoogleService("drive", "Google Drive")}
                   >
-                    {loadingService === "drive" ? "Procesando..." : connectedServices.drive ? "Desconectar" : "Conectar"}
+                    {t("Próximamente")}
                   </button>
                 </div>
               </div>
@@ -254,22 +242,22 @@ export function GoogleIntegrationsModal({
                   </div>
                   <div className="service-meta">
                     <h4>Google Tasks</h4>
-                    <small>Sincronización de pendientes</small>
+                    <small>{t("Sincronización de pendientes")}</small>
                   </div>
                 </div>
                 <p className="service-details">
-                  Importa tus listas de tareas de Google y sincroniza el estado de las completadas.
+                  {t("Importa tus listas de tareas de Google y sincroniza el estado de las completadas.")}
                 </p>
                 <div className="service-bottom">
                   <span className={`service-chip ${connectedServices.tasks ? "active" : ""}`}>
-                    {connectedServices.tasks ? "Conectado" : "No vinculado"}
+                    {connectedServices.tasks ? t("Conectado") : t("No vinculado")}
                   </span>
                   <button
                     className={`btn-action ${connectedServices.tasks ? "btn-disconnect" : "btn-connect"}`}
-                    disabled={loadingService === "tasks"}
+                    disabled
                     onClick={() => handleToggleGoogleService("tasks", "Google Tasks")}
                   >
-                    {loadingService === "tasks" ? "Procesando..." : connectedServices.tasks ? "Desconectar" : "Conectar"}
+                    {t("Próximamente")}
                   </button>
                 </div>
               </div>
@@ -282,22 +270,22 @@ export function GoogleIntegrationsModal({
                   </div>
                   <div className="service-meta">
                     <h4>Gmail</h4>
-                    <small>Resúmenes por correo electrónico</small>
+                    <small>{t("Resúmenes por correo electrónico")}</small>
                   </div>
                 </div>
                 <p className="service-details">
-                  Envía el resumen matutino de tu día o la reflexión de la noche directamente a tu bandeja de entrada.
+                  {t("Envía el resumen matutino de tu día o la reflexión de la noche directamente a tu bandeja de entrada.")}
                 </p>
                 <div className="service-bottom">
                   <span className={`service-chip ${connectedServices.gmail ? "active" : ""}`}>
-                    {connectedServices.gmail ? "Conectado" : "No vinculado"}
+                    {connectedServices.gmail ? t("Conectado") : t("No vinculado")}
                   </span>
                   <button
                     className={`btn-action ${connectedServices.gmail ? "btn-disconnect" : "btn-connect"}`}
-                    disabled={loadingService === "gmail"}
+                    disabled
                     onClick={() => handleToggleGoogleService("gmail", "Gmail")}
                   >
-                    {loadingService === "gmail" ? "Procesando..." : connectedServices.gmail ? "Desconectar" : "Conectar"}
+                    {t("Próximamente")}
                   </button>
                 </div>
               </div>
@@ -307,7 +295,7 @@ export function GoogleIntegrationsModal({
           <footer className="modal-security-note">
             <Shield size={14} />
             <span>
-              <strong>Privacidad garantizada:</strong> Tempo solicita permisos incrementales y nunca almacena contraseñas. Puedes revocar el acceso en cualquier momento desde tu panel de cuenta de Google.
+              <strong>{t("Privacidad garantizada:")}</strong> {t("Tempo solicita permisos incrementales y nunca almacena contraseñas. Puedes revocar el acceso en cualquier momento desde tu panel de cuenta de Google.")}
             </span>
           </footer>
         </div>

@@ -49,16 +49,21 @@ export default async function HomePage({
     ? requestedDate
     : today;
 
+  const dayStart = new Date(`${selectedDate}T00:00:00.000Z`);
+  const dayEnd = new Date(`${selectedDate}T23:59:59.999Z`);
   const tasks = userId
-    ? await prisma.task.findMany({
-        where: {
-          userId,
-          date: { equals: new Date(`${selectedDate}T00:00:00.000Z`) },
-        },
-        include: { category: true },
-        orderBy: { startTime: "asc" },
-      }).then((items) =>
-        items.map((task) => ({
+    ? await Promise.all([
+        prisma.task.findMany({
+          where: { userId, date: { equals: dayStart } },
+          include: { category: true },
+          orderBy: { startTime: "asc" },
+        }),
+        prisma.calendarEvent.findMany({
+          where: { userId, startTime: { lt: dayEnd }, endTime: { gt: dayStart } },
+          orderBy: { startTime: "asc" },
+        }),
+      ]).then(([items, events]) => [
+        ...items.map((task) => ({
           id: task.id,
           title: task.title,
           time: timeLabel(task.startTime),
@@ -68,8 +73,29 @@ export default async function HomePage({
           energyLevel: task.energyLevel,
           isTop3: task.isTop3,
           status: task.status,
+          description: task.description,
+          location: task.location,
+          priority: task.priority,
+          recurrence: task.recurrence ?? "NONE",
+          reminderMinutes: task.reminderMinutes,
         })),
-      )
+        ...events.map((event) => ({
+          id: `google-${event.id}`,
+          title: event.summary,
+          time: timeLabel(event.startTime),
+          endTime: timeLabel(event.endTime),
+          category: "Google Calendar",
+          categoryColor: "#3b74b8",
+          energyLevel: "MEDIUM",
+          isTop3: false,
+          status: "PENDING",
+          description: event.description,
+          location: null,
+          priority: "MEDIUM",
+          recurrence: "NONE",
+          reminderMinutes: null,
+        })),
+      ].sort((a, b) => a.time.localeCompare(b.time)))
     : selectedDate === today ? demoTasks : [];
 
   return <Dashboard key={selectedDate} tasks={tasks} userName={session?.user?.name ?? null} signedIn={Boolean(userId)} selectedDate={selectedDate} />;

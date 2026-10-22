@@ -39,6 +39,7 @@ Para revisar los registros: `docker compose logs -f app`. Para ver el estado: `d
 ## PWA y sincronización
 
 - En Chrome/Edge, usa el botón **Instalar** cuando el navegador lo ofrezca. En iPhone/iPad, abre la URL en Safari y elige **Compartir → Añadir a pantalla de inicio**.
+- En **Ajustes → Idioma**, elige español o inglés. La preferencia se conserva en el navegador/dispositivo donde la cambias.
 - En móvil y PC usa la misma URL pública y entra con la misma cuenta de Google. Las tareas, prioridades y estados se guardan en PostgreSQL.
 - El modo sin conexión solo muestra una página informativa; no almacena ni sincroniza cambios offline.
 - El servicio worker no guarda en caché las páginas con sesión ni la información de tareas.
@@ -70,6 +71,8 @@ npm run db:generate
 npm run db:migrate -- --name init
 npm run dev
 ```
+
+En el panel **Puertos** de VS Code, reenvía el puerto que indique Next.js en la terminal (normalmente `3000`) y abre la URL que muestra VS Code. Si Next.js indica que el puerto `3000` está ocupado y elige otro, reenvía el nuevo puerto. Para probar el inicio de sesión desde tu PC, configura `NEXTAUTH_URL` con la URL de VS Code y registra en Google Cloud la URL de retorno `<NEXTAUTH_URL>/api/auth/callback/google`; después reinicia el servidor. Si abres la aplicación localmente, usa `http://localhost:3000` como `NEXTAUTH_URL` y como base de la URL de retorno.
 
 ## Calendario
 

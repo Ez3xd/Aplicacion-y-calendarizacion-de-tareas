@@ -10,6 +10,8 @@ const categories = {
   PERSONAL: { label: "Personal", color: "#b7869c" },
 } as const;
 const energyLevels = ["HIGH", "MEDIUM", "LOW"] as const;
+const priorities = ["HIGH", "MEDIUM", "LOW"] as const;
+const recurrences = ["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -19,6 +21,14 @@ function isCategory(value: unknown): value is keyof typeof categories {
 
 function isEnergyLevel(value: unknown): value is typeof energyLevels[number] {
   return typeof value === "string" && energyLevels.includes(value as typeof energyLevels[number]);
+}
+
+function isPriority(value: unknown): value is typeof priorities[number] {
+  return typeof value === "string" && priorities.includes(value as typeof priorities[number]);
+}
+
+function isRecurrence(value: unknown): value is typeof recurrences[number] {
+  return typeof value === "string" && recurrences.includes(value as typeof recurrences[number]);
 }
 
 async function authenticatedUserId() {
@@ -54,6 +64,12 @@ export async function POST(request: Request) {
   const endTime = typeof input.endTime === "string" ? input.endTime : "";
   const categoryName = isCategory(input.category) ? input.category : null;
   const energyLevel = isEnergyLevel(input.energyLevel) ? input.energyLevel : null;
+  const priority = isPriority(input.priority) ? input.priority : "MEDIUM";
+  const recurrence = isRecurrence(input.recurrence) ? input.recurrence : "NONE";
+  const description = typeof input.description === "string" ? input.description.trim().slice(0, 1000) : null;
+  const location = typeof input.location === "string" ? input.location.trim().slice(0, 200) : null;
+  const reminderMinutes = typeof input.reminderMinutes === "number" && [0, 5, 10, 15, 30, 60].includes(input.reminderMinutes)
+    ? input.reminderMinutes : null;
 
   if (!title || title.length > 120 || !datePattern.test(date) ||
       !timePattern.test(startTime) || !timePattern.test(endTime) ||
@@ -83,6 +99,11 @@ export async function POST(request: Request) {
       date: day,
       startTime: start,
       endTime: end,
+      description,
+      location,
+      priority,
+      recurrence: recurrence === "NONE" ? null : recurrence,
+      reminderMinutes,
       energyLevel,
     },
     include: { category: true },
@@ -93,6 +114,11 @@ export async function POST(request: Request) {
     title: task.title,
     time: startTime,
     endTime: endTime,
+    description: task.description,
+    location: task.location,
+    priority: task.priority,
+    recurrence: task.recurrence ?? "NONE",
+    reminderMinutes: task.reminderMinutes,
     category: task.category?.label ?? category.label,
     categoryColor: task.category?.color ?? category.color,
     energyLevel: task.energyLevel,
