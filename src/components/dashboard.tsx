@@ -20,8 +20,10 @@ import {
   Clock3,
   Coffee,
   Flame,
+  HardDrive,
   Leaf,
   ListTodo,
+  Mail,
   Plus,
   Sparkles,
   Target,
@@ -32,10 +34,13 @@ import {
   ListChecks,
   Settings,
   X,
+  Video,
+  ExternalLink,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { GoogleIntegrationsModal } from "@/components/google-integrations-modal";
 import { useLanguage } from "@/components/language-provider";
+import { GOOGLE_APP_URLS } from "@/lib/google-app-urls";
 
 type Task = {
   id: string;
@@ -54,10 +59,10 @@ type Task = {
   reminderMinutes?: number | null;
 };
 
-const routines = [
-  { title: "Revisar email", duration: "15 min", icon: "✉️", color: "routine-peach" },
-  { title: "Tomar agua", duration: "5 min", icon: "💧", color: "routine-blue" },
-  { title: "Leer un poco", duration: "15 min", icon: "📖", color: "routine-lilac" },
+const googleShortcuts = [
+  { title: "Gmail", description: "Correo electrónico", href: GOOGLE_APP_URLS.gmail, color: "routine-peach", Icon: Mail },
+  { title: "Google Drive", description: "Archivos y documentos", href: GOOGLE_APP_URLS.drive, color: "routine-blue", Icon: HardDrive },
+  { title: "Google Meet", description: "Videollamadas", href: GOOGLE_APP_URLS.meet, color: "routine-lilac", Icon: Video },
 ];
 
 const energyLabel: Record<string, string> = {
@@ -162,6 +167,7 @@ export function Dashboard({
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"day" | "week" | "agenda">("day");
   const [activePanel, setActivePanel] = useState<"tasks" | "statistics" | "settings" | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<"all" | "pending" | "completed">("all");
   const selectedDate = new Date(`${initialDate}T12:00:00-06:00`);
   const completeCount = tasks.filter((task) => task.status === "COMPLETED").length;
@@ -341,11 +347,14 @@ export function Dashboard({
 
   return (
     <main className="min-h-screen bg-paper text-ink">
-      <aside className="sidebar">
-        <a href="#" className="brand" aria-label="Tempo inicio">
+      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
+        <div className="sidebar-brand-row">
+          <a href="#" className="brand" aria-label="Tempo inicio">
           <span className="brand-mark"><Clock3 size={19} strokeWidth={2.4} /></span>
           <span>tempo<span className="brand-period">.</span></span>
-        </a>
+          </a>
+          <button className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label={t("Cerrar menú")}><X size={18} /></button>
+        </div>
 
         <div className="sidebar-label">{t("ESPACIO PERSONAL")}</div>
         <nav className="side-nav" aria-label={t("Navegación principal")}>
@@ -366,18 +375,14 @@ export function Dashboard({
           </button>
         </nav>
 
-        <div className="sidebar-label routines-label">{t("TUS RUTINAS")} <button aria-label={t("Añadir rutina")}><Plus size={15} /></button></div>
-        <div className="routine-list">
-          {routines.map((routine) => (
-            <button
-              className="routine-item"
-              key={routine.title}
-              onClick={() => setNotice(t(`${routine.title} añadida a tus rutinas. Asígnale un horario para planificarla.`))}
-            >
-              <span className={`routine-icon ${routine.color}`}>{routine.icon}</span>
-              <span className="routine-copy"><span>{t(routine.title)}</span><small>{routine.duration}</small></span>
-              <Plus size={15} className="routine-add" />
-            </button>
+        <div className="sidebar-label routines-label">{t("APPS DE GOOGLE")} <ExternalLink size={13} /></div>
+        <div className="routine-list google-shortcut-list">
+          {googleShortcuts.map(({ title, description, href, color, Icon }) => (
+            <a className="routine-item google-shortcut" href={href} key={title} target="_blank" rel="noopener noreferrer">
+              <span className={`routine-icon ${color}`}><Icon size={17} /></span>
+              <span className="routine-copy"><span>{title}</span><small>{t(description)}</small></span>
+              <ExternalLink size={14} className="routine-add" />
+            </a>
           ))}
         </div>
 
@@ -398,24 +403,16 @@ export function Dashboard({
         </div>
       </aside>
 
+      {sidebarOpen && <button className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-label={t("Cerrar menú lateral")} />}
+
       <section className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">{t("Tu espacio")} <span>/</span> <strong>{t("Mi día")}</strong></div>
           <div className="topbar-actions">
-            <InstallButton />
             <span className="sync-status"><span className="sync-dot" /> {signedIn ? t("Cuenta de Google conectada") : t("Modo local: guardado en este dispositivo")}</span>
-            {!signedIn && <Link className="connect-button" href="/entrar">{t("Conectar Google")} <ArrowRight size={14} /></Link>}
-            <ThemeSwitcher compact />
-            <button
-              className="icon-button notification-button"
-              aria-label={t("Google y Notificaciones")}
-              title={t("Permisos de Google y Notificaciones")}
-              onClick={() => setIntegrationsOpen(true)}
-            >
-              <Bell size={18} />
-              <i />
+            <button className="avatar top-avatar account-menu-trigger" onClick={() => setSidebarOpen(true)} aria-label={t("Abrir menú de cuenta")} aria-expanded={sidebarOpen}>
+                {initials(userName)}
             </button>
-            <span className="avatar top-avatar">{initials(userName)}</span>
           </div>
         </header>
 

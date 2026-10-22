@@ -17,7 +17,7 @@ export default function PrivacyPage() {
         <p>{t("Responsable: Anderson Reyes. Domicilio: Universidad de Oriente. Contacto de privacidad: andersonezequiel.reyes@gamil.com. Estos campos son obligatorios antes de publicar el servicio.")}</p>
 
         <h2>{t("Datos y permisos solicitados")}</h2>
-        <p>{t("Al iniciar sesión con Google, la aplicación solicita únicamente los permisos básicos de identidad para iniciar sesión y mostrar el nombre y correo de la cuenta. El adaptador de autenticación guarda en la base de datos el identificador de la cuenta de Google y los datos técnicos de autenticación que entrega el proveedor. No solicita acceso al calendario en esta versión. Las funciones de integración con Google Calendar no están conectadas a la interfaz y no se activan por iniciar sesión.")}</p>
+        <p>{t("Al iniciar sesión con Google, la aplicación solicita permisos básicos de identidad y permiso para administrar eventos de Google Calendar, que se usa en la sincronización del calendario. El adaptador de autenticación guarda en la base de datos el identificador de la cuenta de Google y los datos técnicos de autenticación que entrega el proveedor. Los accesos directos a Gmail, Drive y Meet solo abren sus sitios oficiales en otra pestaña: Tempo no recibe acceso a esos servicios ni solicita sus permisos.")}</p>
         <p>{t("Las tareas que el usuario crea (título, fecha, horario, categoría, nivel de energía, estado y prioridad) se guardan en la base de datos del servicio y se asocian a su cuenta. Google procesa la autenticación según sus propios términos y políticas de privacidad.")}</p>
 
         <h2>{t("Finalidades y terceros")}</h2>

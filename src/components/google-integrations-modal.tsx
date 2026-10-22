@@ -3,14 +3,43 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
+import { GOOGLE_APP_URLS } from "@/lib/google-app-urls";
+
+const googleAppShortcuts = [
+  {
+    name: "Gmail",
+    description: "Abre tu bandeja de entrada en Gmail.",
+    details: "Lee y responde tu correo directamente en el sitio oficial de Gmail.",
+    href: GOOGLE_APP_URLS.gmail,
+    Icon: Mail,
+    iconClass: "gmail-icon",
+  },
+  {
+    name: "Google Drive",
+    description: "Abre tus archivos en Drive.",
+    details: "Consulta tus archivos y documentos en el sitio oficial de Google Drive.",
+    href: GOOGLE_APP_URLS.drive,
+    Icon: HardDrive,
+    iconClass: "drive-icon",
+  },
+  {
+    name: "Google Meet",
+    description: "Inicia o únete a una reunión.",
+    details: "Crea una videollamada o introduce un código desde Google Meet.",
+    href: GOOGLE_APP_URLS.meet,
+    Icon: Video,
+    iconClass: "meet-icon",
+  },
+];
 import {
   Bell,
   Calendar,
-  FolderGit2,
-  ListTodo,
+  ExternalLink,
+  HardDrive,
   Mail,
   Shield,
   Sparkles,
+  Video,
   X,
 } from "lucide-react";
 
@@ -75,28 +104,23 @@ export function GoogleIntegrationsModal({
     }
   }
 
-  async function handleToggleGoogleService(serviceKey: string, serviceName: string) {
+  async function handleCalendarSync() {
     if (!signedIn) {
       await signIn("google", { callbackUrl: window.location.pathname });
       return;
     }
 
-    if (serviceKey !== "calendar") {
-      setAlertMsg(t(`${serviceName} todavía no está disponible. Esta opción quedará habilitada en una próxima versión.`));
-      return;
-    }
-
-    setLoadingService(serviceKey);
+    setLoadingService("calendar");
     setAlertMsg(null);
 
     try {
       const response = await fetch("/api/google/calendar/sync", { method: "POST" });
       const result = await response.json() as { error?: string; synced?: number };
-      if (!response.ok) throw new Error(result.error ?? `No se pudo sincronizar ${serviceName}.`);
+      if (!response.ok) throw new Error(result.error ?? "No se pudo sincronizar Google Calendar.");
       setConnectedServices((prev) => ({ ...prev, calendar: true }));
-      setAlertMsg(`${serviceName} ${t("sincronizado")}: ${result.synced ?? 0} ${t("eventos actualizados")}.`);
+      setAlertMsg(`${t("Google Calendar")} ${t("sincronizado")}: ${result.synced ?? 0} ${t("eventos actualizados")}.`);
     } catch (error) {
-      setAlertMsg(error instanceof Error ? t(error.message) : t(`No se pudo sincronizar ${serviceName}. Reautoriza tu cuenta de Google.`));
+      setAlertMsg(error instanceof Error ? t(error.message) : t("No se pudo sincronizar Google Calendar. Reautoriza tu cuenta de Google."));
     } finally {
       setLoadingService(null);
     }
@@ -174,7 +198,7 @@ export function GoogleIntegrationsModal({
               <h3>{t("Programas y Aplicaciones de Google")}</h3>
             </div>
             <p className="integration-desc">
-              {t("Conecta servicios específicos de tu ecosistema Google. Cada programa solicita permisos independientes bajo tu consentimiento.")}
+              {t("Abre Gmail, Drive y Meet directamente. Son accesos a sus sitios oficiales; Tempo no accede a tus datos ni requiere una API para usarlos.")}
             </p>
 
             <div className="services-grid">
@@ -199,103 +223,46 @@ export function GoogleIntegrationsModal({
                   <button
                     className={`btn-action ${connectedServices.calendar ? "btn-disconnect" : "btn-connect"}`}
                     disabled={loadingService === "calendar"}
-                    onClick={() => handleToggleGoogleService("calendar", "Google Calendar")}
+                    onClick={handleCalendarSync}
                   >
                     {loadingService === "calendar" ? t("Sincronizando...") : connectedServices.calendar ? t("Sincronizar") : t("Conectar Google")}
                   </button>
                 </div>
               </div>
 
-              {/* Google Drive / Documentos */}
-              <div className="service-box">
-                <div className="service-top">
-                  <div className="service-icon drive-icon">
-                    <FolderGit2 size={18} />
+              {googleAppShortcuts.map(({ name, description, details, href, Icon, iconClass }) => (
+                <div className="service-box" key={name}>
+                  <div className="service-top">
+                    <div className={`service-icon ${iconClass}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="service-meta">
+                      <h4>{name}</h4>
+                      <small>{t(description)}</small>
+                    </div>
                   </div>
-                  <div className="service-meta">
-                    <h4>Google Drive / Docs</h4>
-                    <small>{t("Respaldos automáticos y notas")}</small>
-                  </div>
-                </div>
-                <p className="service-details">
-                  {t("Guarda tus reflexiones diarias y copias de seguridad de tus planes en una carpeta propia de Drive.")}
-                </p>
-                <div className="service-bottom">
-                  <span className={`service-chip ${connectedServices.drive ? "active" : ""}`}>
-                    {connectedServices.drive ? t("Conectado") : t("No vinculado")}
-                  </span>
-                  <button
-                    className={`btn-action ${connectedServices.drive ? "btn-disconnect" : "btn-connect"}`}
-                    disabled
-                    onClick={() => handleToggleGoogleService("drive", "Google Drive")}
-                  >
-                    {t("Próximamente")}
-                  </button>
-                </div>
-              </div>
-
-              {/* Google Tasks */}
-              <div className="service-box">
-                <div className="service-top">
-                  <div className="service-icon tasks-icon">
-                    <ListTodo size={18} />
-                  </div>
-                  <div className="service-meta">
-                    <h4>Google Tasks</h4>
-                    <small>{t("Sincronización de pendientes")}</small>
+                  <p className="service-details">{t(details)}</p>
+                  <div className="service-bottom">
+                    <span className="service-chip">{t("Sitio oficial de Google")}</span>
+                    <a
+                      className="btn-action btn-connect service-link"
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${t("Abrir sitio oficial de")} ${name}`}
+                    >
+                      {t("Abrir")} <ExternalLink size={12} />
+                    </a>
                   </div>
                 </div>
-                <p className="service-details">
-                  {t("Importa tus listas de tareas de Google y sincroniza el estado de las completadas.")}
-                </p>
-                <div className="service-bottom">
-                  <span className={`service-chip ${connectedServices.tasks ? "active" : ""}`}>
-                    {connectedServices.tasks ? t("Conectado") : t("No vinculado")}
-                  </span>
-                  <button
-                    className={`btn-action ${connectedServices.tasks ? "btn-disconnect" : "btn-connect"}`}
-                    disabled
-                    onClick={() => handleToggleGoogleService("tasks", "Google Tasks")}
-                  >
-                    {t("Próximamente")}
-                  </button>
-                </div>
-              </div>
-
-              {/* Gmail / Alertas por correo */}
-              <div className="service-box">
-                <div className="service-top">
-                  <div className="service-icon gmail-icon">
-                    <Mail size={18} />
-                  </div>
-                  <div className="service-meta">
-                    <h4>Gmail</h4>
-                    <small>{t("Resúmenes por correo electrónico")}</small>
-                  </div>
-                </div>
-                <p className="service-details">
-                  {t("Envía el resumen matutino de tu día o la reflexión de la noche directamente a tu bandeja de entrada.")}
-                </p>
-                <div className="service-bottom">
-                  <span className={`service-chip ${connectedServices.gmail ? "active" : ""}`}>
-                    {connectedServices.gmail ? t("Conectado") : t("No vinculado")}
-                  </span>
-                  <button
-                    className={`btn-action ${connectedServices.gmail ? "btn-disconnect" : "btn-connect"}`}
-                    disabled
-                    onClick={() => handleToggleGoogleService("gmail", "Gmail")}
-                  >
-                    {t("Próximamente")}
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
           </section>
 
           <footer className="modal-security-note">
             <Shield size={14} />
             <span>
-              <strong>{t("Privacidad garantizada:")}</strong> {t("Tempo solicita permisos incrementales y nunca almacena contraseñas. Puedes revocar el acceso en cualquier momento desde tu panel de cuenta de Google.")}
+              <strong>{t("Tus datos siguen bajo tu control:")}</strong> {t("Estos accesos abren los sitios oficiales y no dan a Tempo acceso a Gmail, Drive o Meet. La sincronización de Calendar solicita su propio permiso de Google. Tempo nunca almacena tu contraseña de Google.")}
             </span>
           </footer>
         </div>
