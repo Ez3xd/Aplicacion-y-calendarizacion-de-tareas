@@ -146,8 +146,75 @@ export async function PATCH(request: Request) {
   const input = body as Record<string, unknown>;
   const taskId = typeof input.taskId === "string" ? input.taskId : "";
   const action = input.action;
-  if (!taskId || (action !== "toggle-status" && action !== "toggle-top3")) {
+  if (!taskId || (action !== "toggle-status" && action !== "toggle-top3" && action !== "update-task")) {
     return NextResponse.json({ error: "La actualización enviada no es válida." }, { status: 400 });
+  }
+
+  if (action === "update-task") {
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    const date = typeof input.date === "string" ? input.date : "";
+    const startTime = typeof input.startTime === "string" ? input.startTime : "";
+    const endTime = typeof input.endTime === "string" ? input.endTime : "";
+    const categoryName = isCategory(input.category) ? input.category : null;
+    const energyLevel = isEnergyLevel(input.energyLevel) ? input.energyLevel : null;
+    const priority = isPriority(input.priority) ? input.priority : "MEDIUM";
+    const recurrence = isRecurrence(input.recurrence) ? input.recurrence : "NONE";
+    const description = typeof input.description === "string" ? input.description.trim().slice(0, 1000) : null;
+    const location = typeof input.location === "string" ? input.location.trim().slice(0, 200) : null;
+    const reminderMinutes = typeof input.reminderMinutes === "number" && [0, 5, 10, 15, 30, 60].includes(input.reminderMinutes)
+      ? input.reminderMinutes : null;
+
+    if (!title || title.length > 120 || !datePattern.test(date) || !timePattern.test(startTime) || !timePattern.test(endTime) || !categoryName || !energyLevel) {
+      return NextResponse.json({ error: "Revisa el título, la fecha, el horario y la categoría." }, { status: 400 });
+    }
+    const day = new Date(`${date}T00:00:00.000Z`);
+    const start = new Date(`${date}T${startTime}:00-06:00`);
+    const end = new Date(`${date}T${endTime}:00-06:00`);
+    if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== date || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return NextResponse.json({ error: "La fecha o el horario no son válidos; el término debe ser posterior al inicio." }, { status: 400 });
+    }
+
+    const category = categories[categoryName];
+    const savedCategory = await prisma.category.upsert({
+      where: { userId_name: { userId, name: categoryName } },
+      create: { userId, name: categoryName, ...category },
+      update: {},
+    });
+    const updated = await prisma.task.updateMany({
+      where: { id: taskId, userId },
+      data: {
+        categoryId: savedCategory.id,
+        title,
+        date: day,
+        startTime: start,
+        endTime: end,
+        description,
+        location,
+        priority,
+        recurrence: recurrence === "NONE" ? null : recurrence,
+        reminderMinutes,
+        energyLevel,
+      },
+    });
+    if (!updated.count) return NextResponse.json({ error: "No se encontró esa tarea." }, { status: 404 });
+    const task = await prisma.task.findFirst({ where: { id: taskId, userId }, include: { category: true } });
+    if (!task) return NextResponse.json({ error: "No se encontró esa tarea." }, { status: 404 });
+    return NextResponse.json({
+      id: task.id,
+      title: task.title,
+      time: startTime,
+      endTime,
+      description: task.description,
+      location: task.location,
+      priority: task.priority,
+      recurrence: task.recurrence ?? "NONE",
+      reminderMinutes: task.reminderMinutes,
+      category: task.category?.label ?? category.label,
+      categoryColor: task.category?.color ?? category.color,
+      energyLevel: task.energyLevel,
+      isTop3: task.isTop3,
+      status: task.status,
+    });
   }
 
   const outcome = await prisma.$transaction(async (transaction) => {

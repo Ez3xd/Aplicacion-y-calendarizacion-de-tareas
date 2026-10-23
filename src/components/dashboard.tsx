@@ -25,6 +25,8 @@ import {
   ListTodo,
   Mail,
   Plus,
+  Pencil,
+  RefreshCw,
   Sparkles,
   Target,
   Zap,
@@ -39,8 +41,10 @@ import {
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { GoogleIntegrationsModal } from "@/components/google-integrations-modal";
+import { TempoAssistant } from "@/components/tempo-assistant";
 import { useLanguage } from "@/components/language-provider";
 import { GOOGLE_APP_URLS } from "@/lib/google-app-urls";
+import { getInspirationPhrase } from "@/lib/inspiration";
 
 type Task = {
   id: string;
@@ -72,6 +76,7 @@ const energyLabel: Record<string, string> = {
 };
 
 const categoryLabels: Record<string, string> = { WORK: "Trabajo", STUDY: "Estudio", HEALTH: "Salud", PERSONAL: "Personal" };
+const categoryCodes: Record<string, string> = Object.fromEntries(Object.entries(categoryLabels).map(([code, label]) => [label, code]));
 
 const localTasksKey = (date: string) => `tempo-local-tasks:${date}`;
 
@@ -162,6 +167,8 @@ export function Dashboard({
     return initialTasks;
   });
   const [formOpen, setFormOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [phraseSeed, setPhraseSeed] = useState(0);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
@@ -183,6 +190,10 @@ export function Dashboard({
     taskFilter === "all" ||
     (taskFilter === "pending" ? task.status !== "COMPLETED" : task.status === "COMPLETED")
   ));
+  const inspiration = useMemo(
+    () => getInspirationPhrase(`${initialDate}:${completeCount}:${tasks.length}:${phraseSeed}`, language),
+    [completeCount, initialDate, language, phraseSeed, tasks.length],
+  );
 
   useEffect(() => {
     if (!activePanel) return;
@@ -258,6 +269,18 @@ export function Dashboard({
     void persistAction(taskId, "toggle-status");
   }
 
+  function openTaskEditor(task: Task) {
+    setEditingTask(task);
+    setFormOpen(true);
+    setActivePanel(null);
+  }
+
+  function openNewTask() {
+    setEditingTask(null);
+    setFormOpen(true);
+    setActivePanel(null);
+  }
+
   function exportIcs() {
     downloadCalendar(tasks, initialDate);
     setNotice(t("Calendario exportado correctamente."));
@@ -286,22 +309,78 @@ export function Dashboard({
     const startTime = String(form.get("startTime") ?? "09:00");
     const endTime = String(form.get("endTime") ?? "09:30");
     try {
+      const taskData = {
+        title,
+        date,
+        startTime,
+        endTime,
+        category: String(form.get("category") ?? "PERSONAL"),
+        energyLevel: String(form.get("energyLevel") ?? "MEDIUM"),
+        priority: String(form.get("priority") ?? "MEDIUM"),
+        recurrence: String(form.get("recurrence") ?? "NONE"),
+        reminderMinutes: Number(form.get("reminderMinutes") ?? 0),
+        location: String(form.get("location") ?? "").trim() || null,
+        description: String(form.get("description") ?? "").trim() || null,
+      };
+      if (editingTask) {
+        if (!signedIn) {
+          const updatedTask: Task = {
+            ...editingTask,
+            title,
+            time: startTime,
+            endTime,
+            category: categoryLabels[taskData.category] ?? editingTask.category,
+            energyLevel: taskData.energyLevel,
+            description: taskData.description,
+            location: taskData.location,
+            priority: taskData.priority,
+            recurrence: taskData.recurrence,
+            reminderMinutes: taskData.reminderMinutes,
+          };
+          const nextTasks = date === initialDate
+            ? tasks.map((task) => task.id === editingTask.id ? updatedTask : task).sort((a, b) => a.time.localeCompare(b.time))
+            : tasks.filter((task) => task.id !== editingTask.id);
+          saveLocalTasks(initialDate, nextTasks);
+          if (date !== initialDate) saveLocalTasks(date, [updatedTask]);
+          setTasks(nextTasks);
+          setEditingTask(null);
+          setFormOpen(false);
+          setNotice(t("Tarea actualizada en este dispositivo."));
+          if (date !== initialDate) router.push(`/?date=${date}`);
+          return;
+        }
+        const response = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId: editingTask.id, action: "update-task", ...taskData }),
+        });
+        if (!response.ok) {
+          const result = await response.json() as { error?: string };
+          throw new Error(result.error ?? t("No se pudo actualizar la tarea."));
+        }
+        const updatedTask = await response.json() as Task;
+        setTasks((current) => current.map((task) => task.id === editingTask.id ? updatedTask : task).sort((a, b) => a.time.localeCompare(b.time)));
+        setEditingTask(null);
+        setFormOpen(false);
+        router.refresh();
+        return;
+      }
       if (!signedIn) {
         const localTask: Task = {
           id: `local-${Date.now()}`,
           title,
           time: startTime,
           endTime,
-          category: categoryLabels[String(form.get("category") ?? "PERSONAL")] ?? "Personal",
+          category: categoryLabels[taskData.category] ?? "Personal",
           categoryColor: "#668264",
-          energyLevel: String(form.get("energyLevel") ?? "MEDIUM"),
+          energyLevel: taskData.energyLevel,
           isTop3: false,
           status: "PENDING",
-          description: String(form.get("description") ?? "").trim() || null,
-          location: String(form.get("location") ?? "").trim() || null,
-          priority: String(form.get("priority") ?? "MEDIUM"),
-          recurrence: String(form.get("recurrence") ?? "NONE"),
-          reminderMinutes: Number(form.get("reminderMinutes") ?? 0),
+          description: taskData.description,
+          location: taskData.location,
+          priority: taskData.priority,
+          recurrence: taskData.recurrence,
+          reminderMinutes: taskData.reminderMinutes,
         };
         const nextTasks = date === initialDate
           ? [...tasks, localTask].sort((a, b) => a.time.localeCompare(b.time))
@@ -317,17 +396,7 @@ export function Dashboard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
-          date,
-          startTime,
-          endTime,
-          category: form.get("category"),
-          energyLevel: form.get("energyLevel"),
-          priority: form.get("priority"),
-          recurrence: form.get("recurrence"),
-          reminderMinutes: Number(form.get("reminderMinutes")),
-          location: form.get("location"),
-          description: form.get("description"),
+          ...taskData,
         }),
       });
       if (!response.ok) {
@@ -436,22 +505,23 @@ export function Dashboard({
                 {dateText === new Intl.DateTimeFormat(language === "es" ? "es-MX" : "en-US", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Mexico_City" }).format(new Date()) && <span className="today-pill">{t("HOY")}</span>}
               </div>
             </div>
-            <button className="add-task-button" onClick={() => setFormOpen((open) => !open)}><Plus size={17} /> {t("Nueva tarea")}</button>
+            <button className="add-task-button" onClick={() => formOpen ? setFormOpen(false) : openNewTask()}><Plus size={17} /> {t("Nueva tarea")}</button>
           </div>
 
-          {formOpen && <form className="task-form" onSubmit={createTask}>
-            <label className="form-wide">{t("Título")}<input name="title" maxLength={120} required placeholder={t("¿Qué quieres hacer?")} /></label>
-            <label className="form-wide">{t("Descripción")}<textarea name="description" maxLength={1000} placeholder={t("Notas, detalles o checklist...")} /></label>
+          {formOpen && <form key={editingTask?.id ?? "new-task"} className="task-form" onSubmit={createTask}>
+            <div className="task-form-heading"><strong>{editingTask ? t("Editar tarea") : t("Nueva tarea")}</strong><button type="button" className="icon-button" onClick={() => { setFormOpen(false); setEditingTask(null); }} aria-label={t("Cerrar")}><X size={16} /></button></div>
+            <label className="form-wide">{t("Título")}<input name="title" maxLength={120} required defaultValue={editingTask?.title ?? ""} placeholder={t("¿Qué quieres hacer?")} /></label>
+            <label className="form-wide">{t("Descripción")}<textarea name="description" maxLength={1000} defaultValue={editingTask?.description ?? ""} placeholder={t("Notas, detalles o checklist...")} /></label>
             <label>{t("Fecha")}<input name="date" type="date" required defaultValue={initialDate} /></label>
-            <label>{t("Inicio")}<input name="startTime" type="time" required defaultValue="09:00" /></label>
-            <label>{t("Fin")}<input name="endTime" type="time" required defaultValue="09:30" /></label>
-            <label>{t("Categoría")}<select name="category" defaultValue="PERSONAL"><option value="WORK">{t("Trabajo")}</option><option value="STUDY">{t("Estudio")}</option><option value="HEALTH">{t("Salud")}</option><option value="PERSONAL">{t("Personal")}</option></select></label>
-            <label>{t("Prioridad")}<select name="priority" defaultValue="MEDIUM"><option value="HIGH">{t("Alta")}</option><option value="MEDIUM">{t("Media")}</option><option value="LOW">{t("Baja")}</option></select></label>
-            <label>{t("Energía")}<select name="energyLevel" defaultValue="MEDIUM"><option value="HIGH">{t("Alta")}</option><option value="MEDIUM">{t("Media")}</option><option value="LOW">{t("Baja")}</option></select></label>
-            <label>{t("Repetir")}<select name="recurrence" defaultValue="NONE"><option value="NONE">{t("No se repite")}</option><option value="DAILY">{t("Cada día")}</option><option value="WEEKLY">{t("Cada semana")}</option><option value="MONTHLY">{t("Cada mes")}</option><option value="YEARLY">{t("Cada año")}</option></select></label>
-            <label>{t("Recordatorio")}<select name="reminderMinutes" defaultValue="15"><option value="0">{t("Sin recordatorio")}</option><option value="5">{t("5 min antes")}</option><option value="15">{t("15 min antes")}</option><option value="30">{t("30 min antes")}</option><option value="60">{t("1 hora antes")}</option></select></label>
-            <label className="form-wide">{t("Ubicación")}<input name="location" maxLength={200} placeholder={t("Lugar o enlace de reunión")} /></label>
-            <button className="add-task-button" type="submit" disabled={saving}>{saving ? t("Guardando...") : t("Guardar tarea")}</button>
+            <label>{t("Inicio")}<input name="startTime" type="time" required defaultValue={editingTask?.time ?? "09:00"} /></label>
+            <label>{t("Fin")}<input name="endTime" type="time" required defaultValue={editingTask?.endTime ?? "09:30"} /></label>
+            <label>{t("Categoría")}<select name="category" defaultValue={categoryCodes[editingTask?.category ?? ""] ?? "PERSONAL"}><option value="WORK">{t("Trabajo")}</option><option value="STUDY">{t("Estudio")}</option><option value="HEALTH">{t("Salud")}</option><option value="PERSONAL">{t("Personal")}</option></select></label>
+            <label>{t("Prioridad")}<select name="priority" defaultValue={editingTask?.priority ?? "MEDIUM"}><option value="HIGH">{t("Alta")}</option><option value="MEDIUM">{t("Media")}</option><option value="LOW">{t("Baja")}</option></select></label>
+            <label>{t("Energía")}<select name="energyLevel" defaultValue={editingTask?.energyLevel ?? "MEDIUM"}><option value="HIGH">{t("Alta")}</option><option value="MEDIUM">{t("Media")}</option><option value="LOW">{t("Baja")}</option></select></label>
+            <label>{t("Repetir")}<select name="recurrence" defaultValue={editingTask?.recurrence ?? "NONE"}><option value="NONE">{t("No se repite")}</option><option value="DAILY">{t("Cada día")}</option><option value="WEEKLY">{t("Cada semana")}</option><option value="MONTHLY">{t("Cada mes")}</option><option value="YEARLY">{t("Cada año")}</option></select></label>
+            <label>{t("Recordatorio")}<select name="reminderMinutes" defaultValue={String(editingTask?.reminderMinutes ?? 15)}><option value="0">{t("Sin recordatorio")}</option><option value="5">{t("5 min antes")}</option><option value="15">{t("15 min antes")}</option><option value="30">{t("30 min antes")}</option><option value="60">{t("1 hora antes")}</option></select></label>
+            <label className="form-wide">{t("Ubicación")}<input name="location" maxLength={200} defaultValue={editingTask?.location ?? ""} placeholder={t("Lugar o enlace de reunión")} /></label>
+            <button className="add-task-button" type="submit" disabled={saving}>{saving ? t("Guardando...") : editingTask ? t("Guardar cambios") : t("Guardar tarea")}</button>
           </form>}
 
           {notice && <div role="status" className="notice"><span>{t(notice)}</span><button onClick={() => setNotice("")} aria-label={t("Cerrar")}>×</button></div>}
@@ -534,6 +604,7 @@ export function Dashboard({
                               <div className="task-title-row"><strong>{task.title}</strong>{task.isTop3 && <span className="task-priority"><Sparkles size={11} /> {t("PRIORIDAD")}</span>}</div>
                               <div className="task-meta"><span className="task-time">{task.time} – {task.endTime}</span><span className="meta-divider" /><span className="category-dot" style={{ background: task.categoryColor }} />{t(task.category)}<span className="meta-divider" /><Zap size={11} />{t(energyLabel[task.energyLevel] ?? "Energía media")}{task.priority === "HIGH" && <><span className="meta-divider" /><strong className="high-priority">{t("Urgente")}</strong></>}{task.recurrence && task.recurrence !== "NONE" && <><span className="meta-divider" /><Repeat2 size={11} /> {t("Repetitiva")}</>}{task.location && <><span className="meta-divider" /><MapPin size={11} /> {task.location}</>}</div>
                             </div>
+                            <button className="task-edit-button" onClick={() => openTaskEditor(task)} aria-label={`${t("Editar tarea")}: ${task.title}`}><Pencil size={14} /></button>
                             <button className={`priority-toggle ${task.isTop3 ? "priority-selected" : ""}`} onClick={() => toggleTop3(task.id)} aria-label={task.isTop3 ? t("Quitar de prioridades") : t("Añadir a Top 3")}><Sparkles size={14} /></button>
                           </article>
                         ))}
@@ -561,7 +632,7 @@ export function Dashboard({
                   ))}
                 </div>
                 <div className="week-days">{(language === "es" ? ["L", "M", "M", "J", "V", "S", "D"] : ["M", "T", "W", "T", "F", "S", "S"]).map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
-                <div className="week-footer"><span><span className="legend-dot" /> {t("Constancia")}</span><button>{t("Ver estadísticas")} <ArrowRight size={13} /></button></div>
+                <div className="week-footer"><span><span className="legend-dot" /> {t("Constancia")}</span><button type="button" onClick={() => setActivePanel("statistics")}>{t("Ver estadísticas")} <ArrowRight size={13} /></button></div>
               </section>
 
               <section className="energy-card">
@@ -574,12 +645,12 @@ export function Dashboard({
 
               <section className="ritual-card">
                 <div className="ritual-top"><span className="ritual-icon"><Coffee size={16} /></span><span className="section-kicker">{t("UN RECORDATORIO AMABLE")}</span></div>
-                <h3>{t("No olvides hacer")}<br />{t("una pausa.")}</h3>
-                <p>{t("Tu descanso también")}<br />{t("es parte del plan.")}</p>
-                <div className="ritual-bottom"><span>{t("Respira. Vas bien.")}</span><span className="ritual-sun">✳</span></div>
+                <h3>{inspiration.text}</h3>
+                <p>{t("Un recordatorio amable para seguir a tu ritmo.")}</p>
+                <div className="ritual-bottom"><span>{t("Para hoy")}</span><button type="button" className="phrase-refresh" onClick={() => setPhraseSeed((seed) => seed + 1)} aria-label={t("Otra frase")} title={t("Otra frase")}><RefreshCw size={14} /></button></div>
               </section>
 
-              <button className="review-button" onClick={() => setNotice(t("Tu revisión diaria quedará disponible al activar las notificaciones."))}><Check size={15} /> {t("Cerrar el día")} <span>{t("Revisar juntos")}</span><ArrowRight size={14} /></button>
+              <button className="review-button" type="button" onClick={() => { setTaskFilter("completed"); setActivePanel("tasks"); }}><Check size={15} /> {t("Cerrar el día")} <span>{t("Revisar juntos")}</span><ArrowRight size={14} /></button>
             </aside>
           </div>
           <footer className="dashboard-footer"><span>{t("Hecho para vivir mejor, no para hacer más.")}</span><span><Link href="/privacidad">{t("Privacidad")}</Link> · {t("Tómalo con calma")} <span className="footer-heart">♥</span></span></footer>
@@ -670,6 +741,7 @@ export function Dashboard({
                           <span className={`task-panel-status ${task.status === "COMPLETED" ? "done" : ""}`}>
                             {task.status === "COMPLETED" ? t("Completada") : t("Pendiente")}
                           </span>
+                          <button type="button" className="task-panel-edit" onClick={() => openTaskEditor(task)} aria-label={`${t("Editar tarea")}: ${task.title}`}><Pencil size={14} /></button>
                         </div>
                       </article>
                     ))}
@@ -683,7 +755,7 @@ export function Dashboard({
                 )}
                 <footer className="panel-footer">
                   <span>{t("Organiza tu día a tu ritmo.")}</span>
-                  <button type="button" className="btn-primary" onClick={() => { setActivePanel(null); setFormOpen(true); }}>
+                  <button type="button" className="btn-primary" onClick={openNewTask}>
                     <Plus size={15} /> {t("Nueva tarea")}
                   </button>
                 </footer>
@@ -794,6 +866,13 @@ export function Dashboard({
           </section>
         </div>
       )}
+      <TempoAssistant
+        tasks={tasks.map(({ id, title, time, status }) => ({ id, title, time, status }))}
+        completedCount={completeCount}
+        onOpenTasks={() => { setTaskFilter("all"); setActivePanel("tasks"); }}
+        onOpenCompleted={() => { setTaskFilter("completed"); setActivePanel("tasks"); }}
+        onNewTask={openNewTask}
+      />
     </main>
   );
 }
